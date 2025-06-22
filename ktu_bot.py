@@ -4,14 +4,27 @@ import requests
 import urllib3
 from bs4 import BeautifulSoup
 
-# Disable SSL warnings (for ktu.edu.in)
+# Disable SSL warnings for ktu.edu.in
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Read environment variables from Railway
+# Read environment variables
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
 
-# Telegram send function
+# File to store last notice title
+LAST_NOTICE_FILE = "last_notice.txt"
+
+def save_last_notice(title):
+    with open(LAST_NOTICE_FILE, 'w') as f:
+        f.write(title)
+
+def load_last_notice():
+    try:
+        with open(LAST_NOTICE_FILE, 'r') as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return ""
+
 def send_to_telegram(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
@@ -22,7 +35,6 @@ def send_to_telegram(message):
     response = requests.post(url, data=payload)
     print("✅ Telegram response:", response.status_code)
 
-# Scrape KTU announcements
 def get_latest_notice():
     url = "https://ktu.edu.in/eu/core/announcements.htm"
     try:
@@ -37,20 +49,20 @@ def get_latest_notice():
         print(f"⚠ Error fetching notice: {e}")
         return None, None
 
-# Store last notice to avoid duplicates
-last_notice = ""
+last_notice = load_last_notice()
+print(f"Last notice loaded: '{last_notice}'")
 
-# Loop forever (every 5 minutes)
 while True:
     print("🔄 Checking for new KTU notices...")
     title, link = get_latest_notice()
 
-    if title and title = last_notice:
+    if title and title != last_notice:
         message = f"📢 *New KTU Notice:*\n\n*{title}*\n\n👉 [Click here to view]({link})"
         send_to_telegram(message)
         last_notice = title
-        print(f"📨 Sent: {title}")
+        save_last_notice(title)
+        print(f"📨 Sent new notice: {title}")
     else:
-        print("ℹ️ No new notice.")
+        print("ℹ️ No new notice or already sent.")
 
-    time.sleep(30)  # wait 5 minutes
+    time.sleep(300)  # wait 5 minutes
