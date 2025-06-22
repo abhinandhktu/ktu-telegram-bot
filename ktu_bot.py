@@ -1,7 +1,11 @@
 import os
 import time
 import requests
+import urllib3
 from datetime import datetime, timedelta
+
+# Disable SSL warnings and verification for KTU API (not recommended for production)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
@@ -20,13 +24,17 @@ def save_sent_notice(notice_id):
 
 def send_to_telegram(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown"}
-    resp = requests.post(url, data=payload)
-    print("Telegram response:", resp.status_code)
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    response = requests.post(url, data=payload)
+    print("Telegram response status:", response.status_code)
 
 def get_announcements():
     url = "https://api.ktu.edu.in/ktu-web-portal-api/anon/announcemnts"
-    response = requests.get(url)
+    response = requests.get(url, verify=False)  # disable SSL verification here
     response.raise_for_status()
     return response.json()
 
@@ -37,30 +45,27 @@ def main():
     five_days_ago = datetime.now() - timedelta(days=5)
 
     for ann in announcements:
-        # Check date field - adapt key name based on actual API response
-        # For example, suppose 'date' field contains the date string
-        date_str = ann.get('date') or ann.get('publishedDate') or ann.get('createdDate')
+        # Adjust these keys according to actual API response structure
+        date_str = ann.get('publishedDate') or ann.get('date') or ann.get('createdDate')
         if not date_str:
             continue
 
-        # Example: API might return ISO date string like "2025-06-22T10:20:30Z"
         try:
+            # Parse ISO datetime string
             ann_date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
         except Exception:
             print("Date parse error:", date_str)
             continue
 
         if ann_date >= five_days_ago:
-            # Create a unique ID for tracking to avoid duplicates
-            notice_id = ann.get('id') or ann.get('announcementId') or ann.get('title', '') + date_str
+            notice_id = str(ann.get('id') or ann.get('announcementId') or ann.get('title', '') + date_str)
             if notice_id in sent_notices:
                 print(f"Already sent: {ann.get('title')}")
                 continue
 
             title = ann.get('title', 'No Title')
-            link = ann.get('link', '#')  # use actual link key or construct if needed
-            if not link.startswith('http'):
-                # If link is relative or missing, fallback to main announcements page
+            link = ann.get('link') or "https://ktu.edu.in/eu/core/announcements.htm"
+            if not link.startswith("http"):
                 link = "https://ktu.edu.in/eu/core/announcements.htm"
 
             message = f"📢 *KTU Notice ({ann_date.strftime('%d-%m-%Y')}):*\n\n*{title}*\n\n👉 [View Notice]({link})"
