@@ -33,7 +33,7 @@ def send_to_telegram(message):
     print("Telegram response status:", response.status_code)
 
 def get_announcements():
-    url = "https://api.ktu.edu.in/ktu-web-portal-api/anon/announcemnts"
+    url = "https://api.ktu.edu.in/ktu-web-portal-api/anon/announcements"
     response = requests.get(url, verify=False)  # disable SSL verification here
     response.raise_for_status()
     return response.json()
