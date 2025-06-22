@@ -65,4 +65,4 @@ while True:
     else:
         print("ℹ️ No new notice or already sent.")
 
-    time.sleep(300)  # wait 5 minutes
+    time.sleep(30)  # wait 5 minutes
