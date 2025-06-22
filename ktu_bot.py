@@ -1,39 +1,56 @@
-import requests
-from bs4 import BeautifulSoup
-import time
 import os
+import time
+import requests
+import urllib3
+from bs4 import BeautifulSoup
 
+# Disable SSL warnings (for ktu.edu.in)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Read environment variables from Railway
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
-CHECK_INTERVAL = 30  # seconds
 
-def fetch_latest():
-    url = "https://ktu.edu.in/eu/core/announcements.htm"
-    r = requests.get(url)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.content, "html.parser")
-    link = soup.select_one(".panel-title a")
-    title = link.get_text(strip=True) if link else None
-    href = link["href"] if link else None
-    return title, href
-
-def send(message):
+# Telegram send function
+def send_to_telegram(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown"}
-    requests.post(url, data=data)
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    response = requests.post(url, data=payload)
+    print("✅ Telegram response:", response.status_code)
 
-def main():
-    last = None
-    while True:
-        try:
-            title, href = fetch_latest()
-            if title and (title != last):
-                msg = f"📢 *New KTU Notice*\n{title}\n\n[View Notice](https://ktu.edu.in{href})"
-                send(msg)
-                last = title
-        except Exception as e:
-            send(f"⚠️ Bot error: `{e}`")
-        time.sleep(CHECK_INTERVAL)
+# Scrape KTU announcements
+def get_latest_notice():
+    url = "https://ktu.edu.in/eu/core/announcements.htm"
+    try:
+        response = requests.get(url, verify=False)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        notice = soup.find('td', class_='notice_title')
+        title = notice.text.strip()
+        href = notice.find('a')['href']
+        full_link = f"https://ktu.edu.in{href}"
+        return title, full_link
+    except Exception as e:
+        print(f"⚠ Error fetching notice: {e}")
+        return None, None
 
-if __name__ == "__main__":
-    main()
+# Store last notice to avoid duplicates
+last_notice = ""
+
+# Loop forever (every 5 minutes)
+while True:
+    print("🔄 Checking for new KTU notices...")
+    title, link = get_latest_notice()
+
+    if title and title != last_notice:
+        message = f"📢 *New KTU Notice:*\n\n*{title}*\n\n👉 [Click here to view]({link})"
+        send_to_telegram(message)
+        last_notice = title
+        print(f"📨 Sent: {title}")
+    else:
+        print("ℹ️ No new notice.")
+
+    time.sleep(30)  # wait 5 minutes
