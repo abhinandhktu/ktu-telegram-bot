@@ -3,7 +3,12 @@ import time
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
+import urllib3
 
+# ✅ Disable SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# ✅ Read env variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
@@ -40,10 +45,10 @@ def get_latest_notices():
     url = "https://ktu.edu.in/eu/core/announcements.htm"
     try:
         print(f"Fetching notices from {url} ...")
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=10, verify=False)  # ✅ Disable SSL check
         response.raise_for_status()
     except requests.RequestException as e:
-        print(f"Network error while fetching notices: {e}")
+        print(f"⚠️ Network error while fetching notices: {e}")
         return []
 
     soup = BeautifulSoup(response.text, 'html.parser')
@@ -74,7 +79,7 @@ def get_latest_notices():
             title = link_tag.text.strip()
         else:
             title = title_td.text.strip()
-            link = "https://ktu.edu.in/eu/core/announcements.htm"
+            link = url
 
         notice_id = f"{title}-{date_text}"
         notices.append((notice_id, title, link, notice_date))
@@ -83,11 +88,11 @@ def get_latest_notices():
     return notices
 
 def main():
-    print("Bot started!")
+    print("✅ Bot started!")
     sent_notices = load_sent_notices()
 
     while True:
-        print("Checking for new notices...")
+        print("🔍 Checking for new notices...")
         new_notices = get_latest_notices()
 
         for notice_id, title, link, notice_date in new_notices:
@@ -103,13 +108,13 @@ def main():
             send_to_telegram(message)
             save_sent_notice(notice_id)
             sent_notices.add(notice_id)
-            print(f"Sent new notice: {title}")
+            print(f"✅ Sent new notice: {title}")
 
-        print("Sleeping for 60 seconds...\n")
+        print("⏳ Sleeping for 60 seconds...\n")
         time.sleep(60)
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(f"Fatal error: {e}")
+        print(f"❌ Fatal error: {e}")
