@@ -45,7 +45,7 @@ while True:
     print("🔄 Checking for new KTU notices...")
     title, link = get_latest_notice()
 
-    if title and title != last_notice:
+    if title and title = last_notice:
         message = f"📢 *New KTU Notice:*\n\n*{title}*\n\n👉 [Click here to view]({link})"
         send_to_telegram(message)
         last_notice = title
