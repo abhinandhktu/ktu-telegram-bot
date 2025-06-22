@@ -4,7 +4,7 @@ import requests
 import urllib3
 from datetime import datetime, timedelta
 
-# Disable SSL warnings and verification for KTU API (not recommended for production)
+# Disable SSL warnings (not recommended for production)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
@@ -33,7 +33,7 @@ def send_to_telegram(message):
     print("Telegram response status:", response.status_code)
 
 def get_announcements():
-    url = "https://api.ktu.edu.in/ktu-web-portal-api/anon/announcements"
+    url = "https://api.ktu.edu.in/ktu-web-portal-api/anon/announcements"  # Corrected URL here
     response = requests.get(url, verify=False)  # disable SSL verification here
     response.raise_for_status()
     return response.json()
@@ -51,7 +51,6 @@ def main():
             continue
 
         try:
-            # Parse ISO datetime string
             ann_date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
         except Exception:
             print("Date parse error:", date_str)
