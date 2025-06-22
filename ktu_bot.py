@@ -1,25 +1,26 @@
 import os
 import time
 import requests
-from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
+from bs4 import BeautifulSoup
 import urllib3
+import chromedriver_autoinstaller
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 
-# ✅ Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# ✅ Read env variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
 SENT_NOTICES_FILE = "sent_notices.txt"
+URL = "https://ktu.edu.in/Menu/announcements"
 
 def load_sent_notices():
     try:
         with open(SENT_NOTICES_FILE, "r") as f:
             return set(line.strip() for line in f.readlines())
     except FileNotFoundError:
-        print("No sent notices file found, starting fresh.")
         return set()
 
 def save_sent_notice(notice_id):
@@ -28,89 +29,86 @@ def save_sent_notice(notice_id):
 
 def send_to_telegram(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
+    data = {
         "chat_id": CHAT_ID,
         "text": message,
         "parse_mode": "Markdown"
     }
     try:
-        response = requests.post(url, data=payload)
-        print(f"Telegram API response: {response.status_code}")
-        if response.status_code != 200:
-            print(f"Telegram error response: {response.text}")
+        response = requests.post(url, data=data)
+        print(f"✅ Telegram status: {response.status_code}")
     except Exception as e:
-        print(f"Failed to send Telegram message: {e}")
+        print(f"⚠️ Failed to send Telegram message: {e}")
 
-def get_latest_notices():
-    url ="https://ktu.edu.in/Menu/announcements"
-    try:
-        print(f"Fetching notices from {url} ...")
-        response = requests.get(url, timeout=10, verify=False)  # ✅ Disable SSL check
-        response.raise_for_status()
-    except requests.RequestException as e:
-        print(f"⚠️ Network error while fetching notices: {e}")
-        return []
+def get_announcements():
+    chromedriver_autoinstaller.install()
+    options = Options()
+    options.headless = True
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
 
-    soup = BeautifulSoup(response.text, 'html.parser')
+    driver = webdriver.Chrome(options=options)
+    driver.get(URL)
+    time.sleep(5)  # Let JS load
+
+    soup = BeautifulSoup(driver.page_source, 'html.parser')
+    driver.quit()
 
     notices = []
-    rows = soup.select("table table tr")
+    items = soup.select(".announcement-row")
     five_days_ago = datetime.now() - timedelta(days=5)
 
-    for row in rows:
-        cols = row.find_all('td')
-        if len(cols) < 2:
-            continue
-        date_text = cols[0].text.strip()
-        title_td = cols[1]
+    for item in items:
+        date_el = item.select_one(".ann-date")
+        title_el = item.select_one(".ann-title")
+        link_el = item.select_one("a")
 
+        if not (date_el and title_el and link_el):
+            continue
+
+        date_text = date_el.text.strip()
+        title = title_el.text.strip()
+        link = "https://ktu.edu.in" + link_el['href']
         try:
             notice_date = datetime.strptime(date_text, "%d-%m-%Y")
-        except Exception as e:
-            print(f"Skipping row with invalid date '{date_text}': {e}")
+        except:
             continue
 
         if notice_date < five_days_ago:
             continue
 
-        link_tag = title_td.find('a')
-        if link_tag:
-            link = "https://ktu.edu.in" + link_tag['href']
-            title = link_tag.text.strip()
-        else:
-            title = title_td.text.strip()
-            link = url
-
         notice_id = f"{title}-{date_text}"
         notices.append((notice_id, title, link, notice_date))
 
-    print(f"Found {len(notices)} notices from the last 5 days.")
+    print(f"🔎 Found {len(notices)} recent notices.")
     return notices
 
 def main():
-    print("✅ Bot started!")
-    sent_notices = load_sent_notices()
+    print("🚀 Bot started!")
+    sent = load_sent_notices()
 
     while True:
-        print("🔍 Checking for new notices...")
-        new_notices = get_latest_notices()
+        print("🔍 Checking announcements...")
+        try:
+            notices = get_announcements()
+        except Exception as e:
+            print(f"❌ Error while fetching: {e}")
+            time.sleep(60)
+            continue
 
-        for notice_id, title, link, notice_date in new_notices:
-            if notice_id in sent_notices:
-                print(f"Already sent: {title}")
+        for nid, title, link, ndate in notices:
+            if nid in sent:
                 continue
-
             message = (
-                f"📢 *KTU Notice ({notice_date.strftime('%d-%m-%Y')}):*\n\n"
-                f"*{title}*\n\n"
-                f"👉 [View Notice]({link})"
+                f"📢 *KTU Notice ({ndate.strftime('%d-%m-%Y')}):*\n\n"
+                f"*{title}*\n👉 [View Notice]({link})"
             )
             send_to_telegram(message)
-            save_sent_notice(notice_id)
-            sent_notices.add(notice_id)
-            print(f"✅ Sent new notice: {title}")
+            save_sent_notice(nid)
+            sent.add(nid)
 
-        print("⏳ Sleeping for 60 seconds...\n")
+        print("⏳ Sleeping 60 seconds...\n")
         time.sleep(60)
 
 if __name__ == "__main__":
