@@ -3,8 +3,8 @@ from bs4 import BeautifulSoup
 import time
 import os
 
-BOT_TOKEN = os.environ["7926433038:AAFJkHdLaVDadK0ATOebhZr0cN-hx7GqtUA"]
-CHAT_ID = os.environ["8048904773"]
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+CHAT_ID = os.environ["CHAT_ID"]
 CHECK_INTERVAL = 30  # seconds
 
 def fetch_latest():
