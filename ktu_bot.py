@@ -1,14 +1,14 @@
 import os
 import time
 import requests
-import urllib3
+from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 
-# Disable SSL warnings (not recommended for production)
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
+# Telegram Bot Token and Chat ID from environment variables
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
+
+# File to keep track of sent notices
 SENT_NOTICES_FILE = "sent_notices.txt"
 
 def load_sent_notices():
@@ -30,47 +30,72 @@ def send_to_telegram(message):
         "parse_mode": "Markdown"
     }
     response = requests.post(url, data=payload)
-    print("Telegram response status:", response.status_code)
+    print(f"Telegram response status: {response.status_code}")
 
-def get_announcements():
-    url = "https://api.ktu.edu.in/ktu-web-portal-api/anon/announcements"  # Corrected URL here
-    response = requests.get(url, verify=False)  # disable SSL verification here
+def get_latest_notices():
+    url = "https://ktu.edu.in/eu/core/announcements.htm"
+    response = requests.get(url)
     response.raise_for_status()
-    return response.json()
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    notices = []
+    rows = soup.select("table table tr")  # Selector for the announcements table rows
+    five_days_ago = datetime.now() - timedelta(days=5)
+
+    for row in rows:
+        cols = row.find_all('td')
+        if len(cols) < 2:
+            continue
+        date_text = cols[0].text.strip()
+        title_td = cols[1]
+
+        try:
+            notice_date = datetime.strptime(date_text, "%d-%m-%Y")
+        except Exception:
+            continue
+
+        # Only consider notices within the last 5 days
+        if notice_date < five_days_ago:
+            continue
+
+        link_tag = title_td.find('a')
+        if link_tag:
+            link = "https://ktu.edu.in" + link_tag['href']
+            title = link_tag.text.strip()
+        else:
+            title = title_td.text.strip()
+            link = "https://ktu.edu.in/eu/core/announcements.htm"
+
+        # Unique ID for each notice
+        notice_id = f"{title}-{date_text}"
+        notices.append((notice_id, title, link, notice_date))
+
+    return notices
 
 def main():
     sent_notices = load_sent_notices()
-    announcements = get_announcements()
 
-    five_days_ago = datetime.now() - timedelta(days=5)
+    while True:
+        print("Checking for new notices...")
+        new_notices = get_latest_notices()
 
-    for ann in announcements:
-        # Adjust these keys according to actual API response structure
-        date_str = ann.get('publishedDate') or ann.get('date') or ann.get('createdDate')
-        if not date_str:
-            continue
-
-        try:
-            ann_date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-        except Exception:
-            print("Date parse error:", date_str)
-            continue
-
-        if ann_date >= five_days_ago:
-            notice_id = str(ann.get('id') or ann.get('announcementId') or ann.get('title', '') + date_str)
+        for notice_id, title, link, notice_date in new_notices:
             if notice_id in sent_notices:
-                print(f"Already sent: {ann.get('title')}")
+                print(f"Already sent: {title}")
                 continue
 
-            title = ann.get('title', 'No Title')
-            link = ann.get('link') or "https://ktu.edu.in/eu/core/announcements.htm"
-            if not link.startswith("http"):
-                link = "https://ktu.edu.in/eu/core/announcements.htm"
-
-            message = f"📢 *KTU Notice ({ann_date.strftime('%d-%m-%Y')}):*\n\n*{title}*\n\n👉 [View Notice]({link})"
+            message = (
+                f"📢 *KTU Notice ({notice_date.strftime('%d-%m-%Y')}):*\n\n"
+                f"*{title}*\n\n"
+                f"👉 [View Notice]({link})"
+            )
             send_to_telegram(message)
-            print(f"Sent: {title}")
             save_sent_notice(notice_id)
+            sent_notices.add(notice_id)
+            print(f"Sent: {title}")
+
+        print("Sleeping for 60 seconds...\n")
+        time.sleep(60)  # Wait for 1 minute before checking again
 
 if __name__ == "__main__":
     main()
