@@ -42,7 +42,7 @@ def send_to_telegram(message):
         print(f"Failed to send Telegram message: {e}")
 
 def get_latest_notices():
-    url = "https://ktu.edu.in/eu/core/announcements.htm"
+    url = "url = "https://ktu.edu.in/Menu/announcements"
     try:
         print(f"Fetching notices from {url} ...")
         response = requests.get(url, timeout=10, verify=False)  # ✅ Disable SSL check
